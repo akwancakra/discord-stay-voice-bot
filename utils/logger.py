@@ -74,3 +74,51 @@ def setup_logger():
     return logger
 
 logger = setup_logger()
+
+def clear_log_files() -> bool:
+    """
+    Clears all system log files in logs/ directory.
+    Temporarily closes the file handler, deletes the files, and recreates it.
+    """
+    logger = logging.getLogger("StayVoiceBot")
+    file_handlers = [h for h in logger.handlers if isinstance(h, RotatingFileHandler)]
+    
+    # Close and remove existing file handlers
+    for h in file_handlers:
+        try:
+            h.close()
+            logger.removeHandler(h)
+        except Exception as e:
+            print(f"[Logger Error] Failed to close log file handler: {e}")
+
+    # Delete the files
+    success = True
+    for item in LOGS_DIR.iterdir():
+        if item.is_file() and item.name.startswith("bot.log"):
+            try:
+                item.unlink()
+            except Exception as e:
+                print(f"[Logger Error] Failed to delete log file {item.name}: {e}")
+                success = False
+
+    # Recreate the file handler
+    try:
+        file_handler = RotatingFileHandler(
+            LOG_FILE,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8"
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+        logger.info("Log files cleared and reinitialized successfully.")
+    except Exception as e:
+        print(f"[Logger Error] Failed to reinitialize file logging: {e}")
+        success = False
+
+    return success

@@ -58,8 +58,8 @@ class VoiceCog(commands.Cog, name="Voice"):
                     if vc is not None:
                         # Clean up previous state safely
                         await vc.disconnect(force=True)
-                    await channel.connect(reconnect=True, timeout=20.0)
-                    logger.info(f"Connected to '{channel.name}'.")
+                    await channel.connect(reconnect=True, timeout=20.0, self_deaf=True, self_mute=False)
+                    logger.info(f"Connected to '{channel.name}' (deafened).")
                 
                 # Case 2: Voice client is active but in the WRONG channel
                 elif vc.channel.id != channel_id:

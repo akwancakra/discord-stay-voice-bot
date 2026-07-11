@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from config import config
 from utils.logger import logger
 
@@ -16,6 +16,55 @@ class AdminCog(commands.Cog, name="Admin"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.start_time = time.time()
+        self.presence_index = 0
+        self.presence_rotate_loop.start()
+
+    def cog_unload(self):
+        """Clean up when the cog is unloaded."""
+        self.presence_rotate_loop.cancel()
+
+    @tasks.loop(seconds=30.0)
+    async def presence_rotate_loop(self):
+        """Periodically updates the bot's rich presence activity."""
+        await self.bot.wait_until_ready()
+        
+        try:
+            activities = []
+            
+            # 1. Listening to silence
+            activities.append(discord.Activity(
+                type=discord.ActivityType.listening,
+                name="Silence 🤫"
+            ))
+            
+            # 2. Watching uptime
+            activities.append(discord.Activity(
+                type=discord.ActivityType.watching,
+                name=f"Uptime: {self.get_uptime_string()}"
+            ))
+            
+            # 3. Playing/Locked to channel status
+            target_guild = self.bot.get_guild(config.guild_id) if config.guild_id else None
+            target_channel = target_guild.get_channel(config.voice_channel_id) if target_guild and config.voice_channel_id else None
+            
+            if target_channel:
+                activities.append(discord.Activity(
+                    type=discord.ActivityType.playing,
+                    name=f"Locked to {target_channel.name}"
+                ))
+            else:
+                activities.append(discord.Activity(
+                    type=discord.ActivityType.playing,
+                    name=f"Prefix: {config.prefix}status"
+                ))
+
+            # Select current presence
+            activity = activities[self.presence_index % len(activities)]
+            await self.bot.change_presence(activity=activity)
+            self.presence_index += 1
+            
+        except Exception as e:
+            logger.error(f"Error in presence rotation loop: {e}")
 
     def get_uptime_string(self) -> str:
         """Helper to get a human-readable uptime duration string."""
@@ -127,6 +176,18 @@ class AdminCog(commands.Cog, name="Admin"):
                 
         await self.bot.close()
         sys.exit(0)
+
+    @commands.command(name="clearlogs", aliases=["cl"])
+    @commands.is_owner()
+    async def clearlogs(self, ctx: commands.Context):
+        """Clears all system log files in logs/ directory (owner only)."""
+        await ctx.send("🧹 Attempting to clean up and rotate log files...")
+        
+        from utils.logger import clear_log_files
+        if clear_log_files():
+            await ctx.send("✅ Successfully cleared all log files and reinitialized logging.")
+        else:
+            await ctx.send("❌ Failed to clear log files. Check console or logger for errors.")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AdminCog(bot))
