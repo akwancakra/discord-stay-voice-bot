@@ -16,7 +16,7 @@ DATA_DIR.mkdir(exist_ok=True)
 
 # Default configuration settings
 DEFAULT_CONFIG = {
-    "prefix": "!",
+    "prefix": "st",
     "guild_id": None,
     "voice_channel_id": None,
     "play_silence": True,

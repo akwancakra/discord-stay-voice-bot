@@ -132,7 +132,11 @@ class VoiceCog(commands.Cog, name="Voice"):
             if ctx.author.voice and ctx.author.voice.channel:
                 channel = ctx.author.voice.channel
             else:
-                await ctx.send("❌ You must be in a voice channel or specify a channel name/ID (e.g. `!join General`).")
+                embed = discord.Embed(
+                    description="❌ You must be in a voice channel or specify a channel name/ID (e.g. **`st join General`**).",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=embed)
                 return
 
         # Update configurations
@@ -140,9 +144,28 @@ class VoiceCog(commands.Cog, name="Voice"):
         config.voice_channel_id = channel.id
         self.should_stay = True
 
-        await ctx.send(f"🔄 Attempting to connect to **{channel.name}** and lock connection...")
+        embed = discord.Embed(
+            description=f"🔄 Attempting to connect to **{channel.name}** and lock connection...",
+            color=discord.Color.blue()
+        )
+        message = await ctx.send(embed=embed)
+
         await self.do_reconnect()
-        await ctx.send(f"✅ Successfully joined and locked in voice channel: **{channel.name}**.")
+
+        # Check if connected successfully
+        vc = ctx.guild.voice_client
+        if vc and vc.is_connected() and vc.channel.id == channel.id:
+            success_embed = discord.Embed(
+                description=f"✅ Successfully joined and locked in voice channel: **{channel.name}**.",
+                color=discord.Color.green()
+            )
+            await message.edit(embed=success_embed)
+        else:
+            failed_embed = discord.Embed(
+                description=f"❌ Failed to connect to **{channel.name}**. Please check permissions or logs.",
+                color=discord.Color.red()
+            )
+            await message.edit(embed=failed_embed)
 
     @commands.command(name="leave", aliases=["l", "dc"])
     @commands.guild_only()
@@ -154,9 +177,17 @@ class VoiceCog(commands.Cog, name="Voice"):
         
         if vc and vc.is_connected():
             await vc.disconnect()
-            await ctx.send("👋 Disconnected and paused the stay-in-voice system.")
+            embed = discord.Embed(
+                description="👋 Disconnected and paused the stay-in-voice system.",
+                color=discord.Color.orange()
+            )
+            await ctx.send(embed=embed)
         else:
-            await ctx.send("ℹ️ The bot is not connected to any voice channel in this server.")
+            embed = discord.Embed(
+                description="ℹ️ The bot is not connected to any voice channel in this server.",
+                color=discord.Color.blue()
+            )
+            await ctx.send(embed=embed)
 
     @commands.command(name="setchannel", aliases=["sc"])
     @commands.guild_only()
@@ -167,9 +198,19 @@ class VoiceCog(commands.Cog, name="Voice"):
         config.voice_channel_id = channel.id
         self.should_stay = True
         
-        await ctx.send(f"🔄 Updating target channel to **{channel.name}**...")
+        embed = discord.Embed(
+            description=f"🔄 Updating target channel to **{channel.name}**...",
+            color=discord.Color.blue()
+        )
+        message = await ctx.send(embed=embed)
+        
         await self.do_reconnect()
-        await ctx.send(f"✅ Target channel updated to **{channel.name}**.")
+        
+        success_embed = discord.Embed(
+            description=f"✅ Target channel updated and locked to **{channel.name}**.",
+            color=discord.Color.green()
+        )
+        await message.edit(embed=success_embed)
 
     @commands.command(name="togglesilence", aliases=["ts"])
     @commands.cooldown(rate=1, per=5.0, type=commands.BucketType.user)
@@ -178,8 +219,12 @@ class VoiceCog(commands.Cog, name="Voice"):
         new_state = not config.play_silence
         config.play_silence = new_state
         
-        state_str = "ENABLED" if new_state else "DISABLED (Resource-Saving Mode)"
-        await ctx.send(f"⚙️ Silent audio stream has been **{state_str}**.")
+        state_str = "**ENABLED**" if new_state else "**DISABLED (Resource-Saving Mode)**"
+        embed = discord.Embed(
+            description=f"⚙️ Silent audio stream has been {state_str}.",
+            color=discord.Color.green() if new_state else discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
         
         # Trigger reconnection logic to start/stop the silent player
         if self.should_stay:

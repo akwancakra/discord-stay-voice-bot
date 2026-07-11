@@ -3,6 +3,11 @@ from discord.ext import commands
 from config import config
 from utils.logger import logger
 
+def get_prefix(bot, message):
+    pref = config.prefix
+    # Supports both "st " (with space) and "st" (without space) dynamically
+    return [f"{pref} ", pref]
+
 class StayVoiceBot(commands.Bot):
     def __init__(self):
         # Configure Discord Intents
@@ -11,9 +16,9 @@ class StayVoiceBot(commands.Bot):
         intents.message_content = True
         
         super().__init__(
-            command_prefix=config.prefix,
+            command_prefix=get_prefix,
             intents=intents,
-            help_command=commands.DefaultHelpCommand()
+            help_command=None  # Disable default help command to use our custom UI
         )
         self.first_ready = True
 
@@ -46,14 +51,22 @@ class StayVoiceBot(commands.Bot):
         if isinstance(error, commands.CommandNotFound):
             return  # Ignore command not found errors to avoid log noise
         
+        description = None
+        color = discord.Color.red()
+        
         if isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f"⏳ This command is on cooldown. Please try again in **{error.retry_after:.1f}s**.")
+            description = f"⏳ This command is on cooldown. Please try again in **{error.retry_after:.1f}s**."
+            color = discord.Color.orange()
         elif isinstance(error, commands.MissingPermissions):
-            await ctx.send("❌ You don't have permission to use this command.")
+            description = "❌ You don't have permission to use this command."
         elif isinstance(error, commands.BadArgument):
-            await ctx.send("❌ Invalid argument provided. Please check command usage.")
+            description = "❌ Invalid argument provided. Please check command usage."
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"❌ Missing required argument: `{error.param.name}`.")
+            description = f"❌ Missing required argument: **`{error.param.name}`**."
         else:
             logger.error(f"Error in command '{ctx.command}': {error}", exc_info=True)
-            await ctx.send(f"❌ An error occurred while executing the command.")
+            description = "❌ An error occurred while executing the command."
+            
+        if description:
+            embed = discord.Embed(description=description, color=color)
+            await ctx.send(embed=embed)

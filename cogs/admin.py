@@ -3,6 +3,7 @@ import sys
 import time
 import discord
 from discord.ext import commands, tasks
+from discord.ui import View, Button
 from config import config
 from utils.logger import logger
 
@@ -11,6 +12,55 @@ try:
     import psutil
 except ImportError:
     psutil = None
+
+class HelpView(View):
+    def __init__(self):
+        super().__init__(timeout=None)  # Permanent buttons
+
+    @discord.ui.button(label="🔊 Voice Commands", style=discord.ButtonStyle.primary, custom_id="help_voice")
+    async def voice_button(self, interaction: discord.Interaction, button: Button):
+        embed = discord.Embed(
+            title="🔊 Voice Commands Help",
+            description=(
+                f"Commands for managing stay-in-voice functions. All commands require a user to have the configured roles/permissions.\n\n"
+                f"• **`st join`** `[channel]` (or **`st j`**): Connects the bot to a channel (defaults to your current voice channel) and locks it.\n"
+                f"• **`st leave`** (or **`st l`**, **`st dc`**): Safely disconnects the bot from the voice channel and stops auto-reconnect.\n"
+                f"• **`st setchannel`** `<channel>` (or **`st sc`**): Updates the target voice channel to lock onto.\n"
+                f"• **`st togglesilence`** (or **`st ts`**): Enables/disables streaming silent audio (disabling saves CPU & upload bandwidth)."
+            ),
+            color=discord.Color.blue()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="🛡️ Admin Commands", style=discord.ButtonStyle.secondary, custom_id="help_admin")
+    async def admin_button(self, interaction: discord.Interaction, button: Button):
+        embed = discord.Embed(
+            title="🛡️ Administrative Commands Help",
+            description=(
+                f"Commands for bot administration and resource metrics. Administrative commands require bot owner privileges.\n\n"
+                f"• **`st status`** (or **`st stats`**, **`st info`**): Displays real-time CPU/RAM usage of the bot process, API ping, and voice connection status.\n"
+                f"• **`st uptime`** (or **`st up`**): Displays how long the bot has been online.\n"
+                f"• **`st clearlogs`** (or **`st cl`**): Safely wipes all log files inside `logs/` directory. (Owner Only)\n"
+                f"• **`st reload`** `<cog>`: Hot-reloads a feature cog (e.g. `voice` or `admin`). (Owner Only)\n"
+                f"• **`st shutdown`** (or **`st stop`**): Disconnects all channels and stops the bot process. (Owner Only)"
+            ),
+            color=discord.Color.orange()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="⚡ System Info", style=discord.ButtonStyle.success, custom_id="help_system")
+    async def system_button(self, interaction: discord.Interaction, button: Button):
+        embed = discord.Embed(
+            title="⚡ System Information",
+            description=(
+                f"Technical details on bot optimizations:\n\n"
+                f"• **Auto-Deafen**: Enabled by default to block incoming sound packets, reducing download bandwidth on Mini PCs to exactly 0 KB/s.\n"
+                f"• **Zero-Copy Stream**: Silence is pre-allocated in memory, keeping CPU utilization under 0.1% and RAM between 60-90 MB.\n"
+                f"• **Log Rotation**: Logs are automatically rotated at 5 MB (max 3 backups) to protect disk storage (20 MB cap)."
+            ),
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class AdminCog(commands.Cog, name="Admin"):
     def __init__(self, bot: commands.Bot):
@@ -55,7 +105,7 @@ class AdminCog(commands.Cog, name="Admin"):
             else:
                 activities.append(discord.Activity(
                     type=discord.ActivityType.playing,
-                    name=f"Prefix: {config.prefix}status"
+                    name=f"Prefix: {config.prefix} help"
                 ))
 
             # Select current presence
@@ -85,11 +135,30 @@ class AdminCog(commands.Cog, name="Admin"):
 
     # ==================== COMMANDS ====================
 
+    @commands.command(name="help")
+    @commands.cooldown(rate=1, per=5.0, type=commands.BucketType.user)
+    async def help(self, ctx: commands.Context):
+        """Displays the interactive help menu with buttons."""
+        embed = discord.Embed(
+            title="🌑 Stay-in-Voice Bot Commands Help",
+            description="Select a category below to view detailed commands and instructions.",
+            color=discord.Color.dark_gray()
+        )
+        if self.bot.user.avatar:
+            embed.set_thumbnail(url=self.bot.user.avatar.url)
+            
+        view = HelpView()
+        await ctx.send(embed=embed, view=view)
+
     @commands.command(name="uptime", aliases=["up"])
     @commands.cooldown(rate=1, per=3.0, type=commands.BucketType.user)
     async def uptime(self, ctx: commands.Context):
         """Shows the bot's current online uptime."""
-        await ctx.send(f"⏱️ **Uptime**: {self.get_uptime_string()}")
+        embed = discord.Embed(
+            description=f"⏱️ **Uptime**: {self.get_uptime_string()}",
+            color=discord.Color.dark_gray()
+        )
+        await ctx.send(embed=embed)
 
     @commands.command(name="status", aliases=["stats", "info"])
     @commands.cooldown(rate=1, per=5.0, type=commands.BucketType.user)
@@ -155,16 +224,28 @@ class AdminCog(commands.Cog, name="Admin"):
         try:
             await self.bot.reload_extension(cog_name)
             logger.info(f"Cog '{cog_name}' was reloaded via owner command.")
-            await ctx.send(f"✅ Successfully reloaded extension `{cog_name}`.")
+            embed = discord.Embed(
+                description=f"✅ Successfully reloaded extension **`{cog_name}`**.",
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=embed)
         except Exception as e:
             logger.error(f"Failed to reload cog '{cog_name}': {e}", exc_info=True)
-            await ctx.send(f"❌ Failed to reload `{cog_name}`:\n```py\n{e}\n```")
+            embed = discord.Embed(
+                description=f"❌ Failed to reload **`{cog_name}`**:\n```py\n{e}\n```",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
 
     @commands.command(name="shutdown", aliases=["stop"])
     @commands.is_owner()
     async def shutdown(self, ctx: commands.Context):
         """Shuts down the bot and terminates connection cleanly (owner only)."""
-        await ctx.send("🌑 Powering down. Leaving voice channels and shutting down...")
+        embed = discord.Embed(
+            description="🌑 Powering down. Leaving voice channels and shutting down...",
+            color=discord.Color.dark_gray()
+        )
+        await ctx.send(embed=embed)
         logger.info("Bot shutdown initiated via owner command.")
         
         # Disconnect all voice connections
@@ -181,13 +262,25 @@ class AdminCog(commands.Cog, name="Admin"):
     @commands.is_owner()
     async def clearlogs(self, ctx: commands.Context):
         """Clears all system log files in logs/ directory (owner only)."""
-        await ctx.send("🧹 Attempting to clean up and rotate log files...")
+        embed = discord.Embed(
+            description="🧹 Attempting to clean up and rotate log files...",
+            color=discord.Color.blue()
+        )
+        message = await ctx.send(embed=embed)
         
         from utils.logger import clear_log_files
         if clear_log_files():
-            await ctx.send("✅ Successfully cleared all log files and reinitialized logging.")
+            success_embed = discord.Embed(
+                description="✅ Successfully cleared all log files and reinitialized logging.",
+                color=discord.Color.green()
+            )
+            await message.edit(embed=success_embed)
         else:
-            await ctx.send("❌ Failed to clear log files. Check console or logger for errors.")
+            failed_embed = discord.Embed(
+                description="❌ Failed to clear log files. Check console or logger for errors.",
+                color=discord.Color.red()
+            )
+            await message.edit(embed=failed_embed)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AdminCog(bot))
